@@ -8,12 +8,13 @@
 	the others take its room; one at most, so there is always a comparison to go back to. A click on a run's screen moves it over the lane next to it, larger, until it is
 	closed.
 
-	`at` is the moment to open on, in ms; Infinity for the end.
+	`t` is the moment shown, in ms, bound to the page so it outlives a change of stage; one past
+	the longest run is brought back to its end. Under `pnpm replay` each lane names its stage, and
+	a lane is keyed by id and stage, so one run can fill two lanes (raw next to draft).
 -->
 <script lang="ts">
 	import { faMedal, faXmark } from "@fortawesome/free-solid-svg-icons";
 	import { FontAwesomeIcon } from "@fortawesome/svelte-fontawesome";
-	import { untrack } from "svelte";
 	import { SvelteSet } from "svelte/reactivity";
 	import { fade, scale } from "svelte/transition";
 	import Chat from "./chat/Chat.svelte";
@@ -28,14 +29,17 @@
 		verdictLabel,
 		outcome,
 		type RunWithSession,
+		type Stage,
 		type TaskTrials
 	} from "./run.ts";
 
+	type Lane = RunWithSession & { stage: Stage };
 	let {
 		runs,
 		task,
-		at = 0
-	}: { runs: RunWithSession[]; task?: TaskTrials; at?: number } = $props();
+		t = $bindable(0)
+	}: { runs: Lane[]; task?: TaskTrials; t?: number } = $props();
+	const ref = (run: Lane) => `${run.id}@${run.stage}`;
 
 	/** The runs whose result card is closed, and those whose reason is shown whole. */
 	const closed = new SvelteSet<string>();
@@ -49,7 +53,9 @@
 	);
 
 	const duration = $derived(Math.max(...runs.map((r) => r.session.durationMs)));
-	let t = $state(untrack(() => Math.min(at, duration)));
+	$effect.pre(() => {
+		if (t > duration) t = duration;
+	});
 
 	/** The run whose lane is collapsed: one at most. Collapsing puts back any large screen,
 	 *  which covers the lane next to its own. */
@@ -61,7 +67,7 @@
 	/** The edge a lane folds toward: the last lane's is its right, every other's its left. */
 	const side = (i: number) => (i > 0 && i === runs.length - 1 ? "right" : "left");
 	const columns = $derived(
-		runs.map((r) => (r.id === collapsed ? "44px" : "minmax(0, 1fr)")).join(" ")
+		runs.map((r) => (ref(r) === collapsed ? "44px" : "minmax(0, 1fr)")).join(" ")
 	);
 
 	const result = $derived(runs.length === 2 ? outcome(runs) : null);
@@ -84,10 +90,10 @@
 		{#if task}<strong>{task.name}</strong>{/if}
 	</nav>
 	<div class="lanes" style:grid-template-columns={columns}>
-		{#each runs as run, i (run.id)}
+		{#each runs as run, i (ref(run))}
 			{@const done = t >= run.session.durationMs}
 			<section>
-				{#if collapsed === run.id}
+				{#if collapsed === ref(run)}
 					<button class="rail" onclick={() => (collapsed = null)} title="Expand">
 						{@render panel(side(i))}
 						<span>{ARM_NAMES[run.arm]}</span>
@@ -98,12 +104,13 @@
 					<span>
 						<strong>{ARM_NAMES[run.arm]}</strong>
 						<span class="model">· {run.session.models.map(modelName).join(", ")}</span>
+						{#if import.meta.env.DEV}<span class="at">{run.stage}</span>{/if}
 					</span>
 					<span class="actions">
-						{#if done && closed.has(run.id)}
+						{#if done && closed.has(ref(run))}
 							<button
 								class="results"
-								onclick={() => closed.delete(run.id)}
+								onclick={() => closed.delete(ref(run))}
 								in:receive={{ key: run }}
 								out:send={{ key: run }}
 							>
@@ -111,7 +118,7 @@
 							</button>
 						{/if}
 						{#if runs.length > 1}
-							<button class="collapse" onclick={() => collapse(run.id)} title="Collapse">
+							<button class="collapse" onclick={() => collapse(ref(run))} title="Collapse">
 								{@render panel(side(i))}
 							</button>
 						{/if}
@@ -123,10 +130,10 @@
 					expanded={staged === i}
 					onexpand={runs.length > 1 && !collapsed ? () => (staged = i) : undefined}
 				/>
-				{#if done && !closed.has(run.id)}
+				{#if done && !closed.has(ref(run))}
 					<div class="veil" transition:fade={{ duration: 200 }}>
 						<div class="card" in:receive={{ key: run }} out:send={{ key: run }}>
-							<button class="close" onclick={() => closed.add(run.id)} aria-label="Close">
+							<button class="close" onclick={() => closed.add(ref(run))} aria-label="Close">
 								<FontAwesomeIcon icon={faXmark} />
 							</button>
 							<div class="verdict">{verdictLabel(run)}</div>
@@ -136,7 +143,7 @@
 								<div><b>{kTokens(run.context)}</b>final context</div>
 							</div>
 							{#if run.verdict?.detail}
-								<button class="why" class:open={whole.has(run.id)} onclick={() => whole.add(run.id)}>
+								<button class="why" class:open={whole.has(ref(run))} onclick={() => whole.add(ref(run))}>
 									<span>Why, by {grader(run.verdict)}:</span>
 									{run.verdict.detail}
 								</button>
@@ -262,6 +269,15 @@
 	}
 	.model {
 		color: #7b7a74;
+	}
+	/* The stage a lane shows, under `pnpm replay`. */
+	.at {
+		margin-left: 6px;
+		padding: 1px 6px;
+		border-radius: 4px;
+		background: rgb(11 11 11 / 0.06);
+		font-size: 12px;
+		color: #3d3d3a;
 	}
 	/* Over the covered lane, its veil included. */
 	.stage {

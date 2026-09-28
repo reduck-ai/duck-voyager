@@ -1,35 +1,81 @@
 <!--
-	`?run=<id>&run=<id>` compares those runs; without one, every task with its results. `&t=` starts
-	the replay at a moment: `m:ss` as the timeline shows it, seconds, or `end`. The address is the
-	whole state, so a replay is a link.
+	The route. `?run=<ref>&run=<ref>` compares those runs; without one, every task with its results.
+	A ref is a run id, or `<id>@<stage>` to pin that lane to a stage, so `?run=<id>@raw&run=<id>@draft`
+	puts a run's transcript next to its draft on one timeline. `&stage=` is the stage of the page
+	and of every bare id; `&t=` opens the replay at a moment: `m:ss` as the timeline shows it,
+	seconds, or `end`. The address is the whole state, so a view is a link.
+
+	Only `pnpm replay` has stages other than published: its server reads any of them, and a switch
+	changes the stage in place, keeping the moment. The built site holds the published files alone
+	and a static host ignores a query, so there the page never sends one, and it refuses a ref at
+	another stage rather than show the published file under that stage's name.
 -->
 <script lang="ts">
 	import Compare from "./Compare.svelte";
 	import Home from "./Home.svelte";
-	import type { TaskTrials } from "./run.ts";
+	import type { RunWithSession, Stage, TaskTrials } from "./run.ts";
 
-	const params = new URLSearchParams(location.search);
-	const ids = params.getAll("run");
-	const t = params.get("t") ?? "0";
-	const at =
-		t === "end" ? Infinity : t.split(":").reduce((s, part) => s * 60 + Number(part), 0) * 1000 || 0;
+	const DEV = import.meta.env.DEV;
+	const STAGES: Stage[] = ["raw", "draft", "published"];
 
-	async function get(path: string) {
-		const r = await fetch(path);
+	let params = $state(new URLSearchParams(location.search));
+	const stage = $derived((DEV ? (params.get("stage") ?? "raw") : "published") as Stage);
+	const refs = $derived(
+		params.getAll("run").map((ref) => {
+			const [id, at = stage] = ref.split("@");
+			return { id, stage: at as Stage };
+		})
+	);
+
+	/** Where the replay opens; from then on the timeline owns the moment. */
+	const start = new URLSearchParams(location.search).get("t") ?? "0";
+	let t = $state(
+		start === "end"
+			? Infinity
+			: start.split(":").reduce((s, part) => s * 60 + Number(part), 0) * 1000 || 0
+	);
+
+	/** Changes the address in place: no reload, and the view follows. */
+	function go(changes: Record<string, string>) {
+		const next = new URLSearchParams(params);
+		for (const [key, value] of Object.entries(changes)) next.set(key, value);
+		history.replaceState(null, "", `?${next}`);
+		params = next;
+	}
+
+	async function get(path: string, at: Stage) {
+		if (!DEV && at !== "published")
+			throw new Error(`"${path}@${at}" is not on the public site: only published runs are.`);
+		const r = await fetch(DEV ? `data/${path}.json?stage=${at}` : `data/${path}.json`);
 		if (!r.ok) throw new Error(await r.text());
 		return r.json();
 	}
+
+	const tasks = $derived(get("tasks", stage) as Promise<TaskTrials[]>);
+	const runs = $derived(
+		Promise.all(
+			refs.map(async (ref) => ({ ...((await get(ref.id, ref.stage)) as RunWithSession), stage: ref.stage }))
+		)
+	);
 </script>
 
-{#if ids.length}
-	{#await Promise.all([get("data/tasks.json"), ...ids.map((id) => get(`data/${id}.json`))]) then [tasks, ...runs]}
-		<Compare {runs} {at} task={(tasks as TaskTrials[]).find((t) => t.id === runs[0].task)} />
+{#if DEV}
+	<div class="stages" role="group" aria-label="Stage">
+		{#each STAGES as s (s)}
+			<button class:on={stage === s} onclick={() => go({ stage: s })}>{s}</button>
+		{/each}
+	</div>
+{/if}
+
+{#if refs.length}
+	{#await Promise.all([tasks, runs]) then [tasks, runs]}
+		<Compare {runs} bind:t task={tasks.find((task) => task.id === runs[0].task)} />
 	{:catch error}
 		<p>{error.message}</p>
 	{/await}
 {:else}
-	{#await get("data/tasks.json") then tasks}
-		<Home {tasks} />
+	{#await tasks then tasks}
+		<Home {tasks} stage={DEV ? stage : undefined} />
 	{:catch error}
 		<p>{error.message}</p>
 	{/await}
@@ -57,5 +103,32 @@
 	}
 	p {
 		padding: 24px 32px;
+	}
+	/* Over both views, at the top right, where neither puts anything. */
+	.stages {
+		position: fixed;
+		top: 8px;
+		right: 12px;
+		z-index: 3;
+		display: flex;
+		padding: 2px;
+		border-radius: 8px;
+		background: white;
+		box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgb(17 24 39 / 0.08);
+	}
+	.stages button {
+		padding: 3px 10px;
+		border: 0;
+		border-radius: 6px;
+		background: none;
+		font: inherit;
+		font-size: 12px;
+		text-transform: capitalize;
+		color: var(--ink-3);
+		cursor: pointer;
+	}
+	.stages button.on {
+		background: var(--ink);
+		color: #f9fafb;
 	}
 </style>

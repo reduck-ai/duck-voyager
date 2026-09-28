@@ -17,6 +17,10 @@ export type Run = {
 
 export type RunWithSession = Run & { session: Chat & { models: string[] } };
 
+/** Where a run is on its way to the site: its transcript as recorded, its scrubbed draft under
+ *  review, or the approved file the site shows. The same shape at every stage (data.ts). */
+export type Stage = "raw" | "draft" | "published";
+
 /** The runs of one task from one `pnpm bench` call, at most one per arm: what the page
  *  compares. Its id is the call's folder, which every run id starts with. */
 export type Trial = { id: string; runs: Run[] };

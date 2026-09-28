@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameS
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
-import { DRAFTS, index, PUBLISHED, runs, withSession } from "./data.ts";
+import { index, PUBLISHED, runs, stageFile, withSession } from "./data.ts";
 import type { Run, RunWithSession } from "./replay/run.ts";
 import { tasks } from "./task.ts";
 
@@ -66,8 +66,7 @@ const { values, positionals: ids } = parseArgs({
 	allowPositionals: true
 });
 const allTasks = await tasks();
-const publicTasks = new Set(allTasks.filter((t) => !t.private).map((t) => t.id));
-const file = (dir: string, id: string) => join(dir, `${id}.json`);
+const taskOf = new Map(allTasks.map((t) => [t.id, t]));
 const write = (path: string, text: string) => {
 	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, text);
@@ -78,13 +77,14 @@ if (!values.approve) {
 	for (const id of ids) {
 		const r = recorded.find((r) => r.id === id);
 		if (!r) console.error(`${id}: no such run with a transcript`);
-		else if (!publicTasks.has(r.task)) console.error(`${id}: task ${r.task} is private`);
-		else if (existsSync(file(PUBLISHED, id))) console.error(`${id}: already published`);
+		else if (!taskOf.has(r.task)) console.error(`${id}: no task file has the id ${r.task}`);
+		else if (taskOf.get(r.task)!.private) console.error(`${id}: task ${r.task} is private`);
+		else if (existsSync(stageFile(id, "published"))) console.error(`${id}: already published`);
 		else {
 			const run = withSession(r);
 			for (const s of run.session.steps) if (s.kind === "tool") s.images = [];
 			const text = scrub(JSON.stringify(run));
-			write(file(DRAFTS, id), text);
+			write(stageFile(id, "draft"), text);
 			const found = denied(id, text);
 			console.log(`${id}: draft written${found.length ? `, still to redact:\n  ${found.join("\n  ")}` : ""}`);
 		}
@@ -97,12 +97,12 @@ const published = existsSync(PUBLISHED)
 			.filter((f) => f.endsWith(".json") && f !== "tasks.json")
 			.map((f) => f.slice(0, -".json".length))
 	: [];
-const texts = new Map(published.map((id) => [id, readFileSync(file(PUBLISHED, id), "utf8")]));
+const texts = new Map(published.map((id) => [id, readFileSync(stageFile(id, "published"), "utf8")]));
 const problems: string[] = [];
 for (const id of ids) {
-	if (!existsSync(file(DRAFTS, id))) problems.push(`${id}: no draft (pnpm export ${id})`);
+	if (!existsSync(stageFile(id, "draft"))) problems.push(`${id}: no draft (pnpm export ${id})`);
 	else if (texts.has(id)) problems.push(`${id}: already published`);
-	else texts.set(id, readFileSync(file(DRAFTS, id), "utf8"));
+	else texts.set(id, readFileSync(stageFile(id, "draft"), "utf8"));
 }
 for (const [id, text] of texts) problems.push(...denied(id, text));
 if (problems.length) {
@@ -111,8 +111,8 @@ if (problems.length) {
 }
 
 for (const id of ids) {
-	mkdirSync(dirname(file(PUBLISHED, id)), { recursive: true });
-	renameSync(file(DRAFTS, id), file(PUBLISHED, id));
+	mkdirSync(dirname(stageFile(id, "published")), { recursive: true });
+	renameSync(stageFile(id, "draft"), stageFile(id, "published"));
 }
 // The index is whatever the folder holds, so deleting a run's file and running this unpublishes it.
 const listed: Run[] = [...texts.values()].map((text) => {

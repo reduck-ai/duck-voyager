@@ -13,7 +13,7 @@ import { execFile } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { DRAFTS, PUBLISHED, runs } from "./data.ts";
+import { load, runs, stageFile } from "./data.ts";
 import { listSessions, parseSession, projectDir, type Step } from "./session.ts";
 import { tasks } from "./task.ts";
 
@@ -40,15 +40,13 @@ const stage = z
 	);
 const RESULT_CHARS = 500;
 
-const file = (dir: string, runId: string) => join(dir, `${runId}.json`);
-
 /** A session to read: parsed from its transcript, or a run's export, whose session and run
  *  fields are laid flat so both read the same. */
 function open(id: string, dir: string, at: z.infer<typeof stage>): { id: string; steps: Step[] } {
 	if (at !== "raw") {
-		const path = file(at === "draft" ? DRAFTS : PUBLISHED, id);
-		if (!existsSync(path)) throw new Error(`no ${at} for ${id}`);
-		const { session, ...run } = JSON.parse(readFileSync(path, "utf8"));
+		const found = load(id, at);
+		if (!found) throw new Error(`no ${at} for ${id}`);
+		const { session, ...run } = found;
 		return { ...run, ...session };
 	}
 	const run = runs().find((r) => r.id === id);
@@ -85,11 +83,11 @@ server.registerTool(
 	"list_runs",
 	{
 		description:
-			"Every bench run that has its transcript, newest first: its id (`<folder>/<task>.<arm>`), task, arm, verdict, whether its task is private (never exported), and its stage: raw, draft (exported, under review) or published.",
+			"Every bench run that has its transcript, newest first: its id (`<folder>/<task>.<arm>`), task, arm, verdict, its task's visibility (public: can be exported; private: under tasks/private/, never exported; gone: no task file has that id any more), and its stage: raw, draft (exported, under review) or published.",
 		inputSchema: {}
 	},
 	async () => {
-		const secret = new Set((await tasks()).filter((t) => t.private).map((t) => t.id));
+		const known = new Map((await tasks()).map((t) => [t.id, t.private ? "private" : "public"]));
 		return json(
 			runs()
 				.sort((a, b) => (a.id < b.id ? 1 : -1))
@@ -98,10 +96,10 @@ server.registerTool(
 					task: r.task,
 					arm: r.arm,
 					verdict: r.verdict,
-					private: secret.has(r.task),
-					stage: existsSync(file(PUBLISHED, r.id))
+					visibility: known.get(r.task) ?? "gone",
+					stage: existsSync(stageFile(r.id, "published"))
 						? "published"
-						: existsSync(file(DRAFTS, r.id))
+						: existsSync(stageFile(r.id, "draft"))
 							? "draft"
 							: "raw"
 				}))
@@ -113,7 +111,7 @@ server.registerTool(
 	"read_session",
 	{
 		description:
-			"Parse one Claude Code session: ask, final answer, duration, models, turns, tokens, the cost Claude Code recorded (total and per model, side models included; null when the transcript records none, as for a subagent's), then every step in order — what the assistant said, and each tool call whole (input, error, its full result, when it started and ended) followed by the images it returned (screenshots). For a bench run, `stage` reads its draft or published export instead: exactly what goes public. full: false gives an outline instead: each result cut to its first 500 characters and images counted, not shown. read_step gives chosen steps in full.",
+			"Parse one Claude Code session: ask, final answer, duration, models, turns, tokens, the cost Claude Code recorded (total and per model, side models included; null when the transcript records none, as for a subagent's), then every step in order — what the assistant said, and each tool call whole (input, error, its full result, when it started and ended) followed by the images it returned (screenshots). For a bench run, `stage` reads its draft or published export instead: exactly what goes public. full: false gives an outline: each result cut to its first 500 characters and images counted, not shown. A bench run is usually too large to read whole in one call: take the outline, then read_step the steps in batches.",
 		inputSchema: {
 			id,
 			cwd,
@@ -200,7 +198,7 @@ server.registerTool(
 		}
 	},
 	async ({ id, find, replace }) => {
-		const path = file(DRAFTS, id);
+		const path = stageFile(id, "draft");
 		if (!existsSync(path)) throw new Error(`no draft for ${id}: export_run it first`);
 		let count = 0;
 		const walk = (v: unknown): unknown => {

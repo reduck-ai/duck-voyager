@@ -8,7 +8,7 @@
 		"allowImportingTsExtensions": true,
 		"noEmit": true,
 		"verbatimModuleSyntax": true,
-		"types": ["node"]
+		"types": ["node", "vite/client"]
 	},
 	"include": ["*.ts", "tasks/**/*.ts", "replay/**/*.ts", "replay/**/*.svelte"]
 }

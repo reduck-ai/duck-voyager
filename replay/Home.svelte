@@ -4,7 +4,8 @@
 	the rest in place; then the comparison, always in
 	view: who did better and by how much, and each tool's time, cost and grade; then a bar at the
 	bottom with the run (a picker when the task has several) and "Open", its replay on the
-	result. A grade shows why it was given on a click, so the numbers stay scannable.
+	result. A grade shows why it was given on a click, so the numbers stay scannable. Given a
+	`stage` (under `pnpm replay`), the tasks are those of that stage and "Open" stays in it.
 -->
 <script lang="ts">
 	import { faMedal } from "@fortawesome/free-solid-svg-icons";
@@ -20,11 +21,12 @@
 		outcome,
 		scoreboard,
 		type Run,
+		type Stage,
 		type TaskTrials,
 		type Trial
 	} from "./run.ts";
 
-	let { tasks }: { tasks: TaskTrials[] } = $props();
+	let { tasks, stage }: { tasks: TaskTrials[]; stage?: Stage } = $props();
 
 	let picked = $state(untrack(() => Object.fromEntries(tasks.map((t) => [t.id, latest(t).id]))));
 	const board = $derived(scoreboard(tasks));
@@ -41,7 +43,7 @@
 	const grade = (run: Run) =>
 		run.verdict ? (run.verdict.pass ? "✓ Passed" : "✗ Failed") : "Not graded";
 	const replay = (trial: Trial) =>
-		`?${trial.runs.map((r) => `run=${encodeURIComponent(r.id)}`).join("&")}&t=end`;
+		`?${trial.runs.map((r) => `run=${encodeURIComponent(r.id)}`).join("&")}${stage ? `&stage=${stage}` : ""}&t=end`;
 </script>
 
 <main>

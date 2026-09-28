@@ -74,7 +74,7 @@ pnpm check                                                   # svelte-check: the
 
 ## Read, grade and replay
 
-- `pnpm replay` serves a page with one card per task: who did better in its latest trial, and by how much. Opening a trial replays its runs side by side on one timeline: the chat, the browser screenshots, and a result card when each run ends. Live, it shows every run on your machine; built, the published ones.
+- `pnpm replay` serves a page with one card per task: who did better in its latest trial, and by how much. Opening a trial replays its runs side by side on one timeline: the chat, the browser screenshots, and a result card when each run ends. Live, it shows every run on your machine at any stage: a switch at the top right moves the page between raw, draft and published in place, and `?run=<id>@raw&run=<id>@draft` puts one run's transcript next to its draft on one timeline. Built, it shows the published runs alone.
 - `pnpm grade <run id>` runs the task's check again; `pnpm grade <run id> pass|fail "<why>"` records a person's verdict, for a task no code can grade.
 - `mcp.ts` is an MCP server over the transcripts and the runs, so an agent can check a run step by step, screenshots included:
 

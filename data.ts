@@ -3,13 +3,14 @@
  * trials, and `<folder>/<task>.<arm>.json`, one run with its session. Each file is exactly a type
  * of `replay/run.ts`, so nothing the page does not show leaves this machine.
  *
- * `pnpm replay` serves them live from `runs/` and the transcripts (vite.config.ts); `pnpm export`
- * drafts the public ones, and `--approve` moves them into `replay/public/data/`, which the site
- * is built from (export.ts).
+ * A run is read at a stage (`list`, `load`): raw from `runs/` and its transcript, draft from
+ * `exports/`, published from `replay/public/data/`. `pnpm replay` serves any stage live
+ * (vite.config.ts), the MCP reads any stage (mcp.ts), and the site is built from the published
+ * files alone. `pnpm export` drafts a run and `--approve` publishes it (export.ts).
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Run, RunWithSession, TaskTrials } from "./replay/run.ts";
+import type { Run, RunWithSession, Stage, TaskTrials } from "./replay/run.ts";
 import { parseSession } from "./session.ts";
 import type { Task } from "./task.ts";
 
@@ -48,10 +49,31 @@ export function runs(): Recorded[] {
 	});
 }
 
-export const listed = (run: Recorded): Run => {
-	const { session: _, ...rest } = withSession(run);
-	return rest;
-};
+/** Where a run's file is at a stage that has files. */
+export const stageFile = (id: string, stage: Exclude<Stage, "raw">) =>
+	join(stage === "draft" ? DRAFTS : PUBLISHED, `${id}.json`);
+
+/** Every run at a stage, without its session. */
+export function list(stage: Stage): Run[] {
+	if (stage === "raw") return runs().map((r) => withoutSession(withSession(r)));
+	const dir = stage === "draft" ? DRAFTS : PUBLISHED;
+	if (!existsSync(dir)) return [];
+	return readdirSync(dir, { recursive: true, encoding: "utf8" })
+		.filter((f) => f.endsWith(".json") && f !== "tasks.json")
+		.map((f) => withoutSession(JSON.parse(readFileSync(join(dir, f), "utf8"))));
+}
+
+/** One run at a stage, whole; null when it has not reached that stage. */
+export function load(id: string, stage: Stage): RunWithSession | null {
+	if (stage === "raw") {
+		const run = runs().find((r) => r.id === id);
+		return run ? withSession(run) : null;
+	}
+	const path = stageFile(id, stage);
+	return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+}
+
+const withoutSession = ({ session: _, ...run }: RunWithSession): Run => run;
 
 /** The tasks that have runs, each with its trials newest first (Reduck MCP first within one);
  *  the task run most recently first. A run whose task file is gone is left out: there is
