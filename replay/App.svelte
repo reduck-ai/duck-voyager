@@ -36,11 +36,24 @@
 {/if}
 
 <style>
+	/* Reduck's palette (app/src/lib/styles/colorPalette.css), on a warm light page. Text is
+	   grey-900, never pure black; the brand orange is the one accent. */
+	:global(:root) {
+		--ink: #111827;
+		--ink-2: #4b5563;
+		--ink-3: #6b7280;
+		--line: rgb(17 24 39 / 0.1);
+		--surface: #fcfcfb;
+		--brand: #f37321;
+		--pass: #16a34a;
+		--fail: #dc2626;
+	}
 	:global(body) {
 		margin: 0;
-		background: #fcfcfb;
-		color: #0b0b0b;
-		font: 14px/20px anthropic-sans, system-ui, sans-serif;
+		background: var(--surface);
+		color: var(--ink);
+		font: 14px/20px Inter, system-ui, sans-serif;
+		font-optical-sizing: auto;
 	}
 	p {
 		padding: 24px 32px;

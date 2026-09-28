@@ -1,6 +1,10 @@
-# duck-voyager
+# Duck Voyager
 
-A benchmark for AI agents doing real tasks in a browser, by [Reduck AI](https://reduck.ai). Replays: https://voyager.reduck.ai. The same agent (Claude Code, through the Agent SDK) gets the same prompt twice, once per arm, with exactly one browser tool:
+Evals for AI agents on real browser tasks, by [Reduck](https://reduck.ai). Results: https://voyager.reduck.ai.
+
+An open-source framework that tests agents on real knowledge work in the browser: market research, SEO, go-to-market. Define an eval in one file, run it, read every step, and share the results.
+
+Here, the same agent (Claude Code, through the Agent SDK) gets the same prompt twice, once per arm, with exactly one browser tool:
 
 - **reduck**: the [Reduck](https://reduck.ai) MCP server, which runs saved browser scripts.
 - **chrome**: Claude in Chrome (`--chrome`).
