@@ -39,7 +39,8 @@ Each call writes `runs/<time>/results.jsonl`, one row per run, and moves every f
 
 ## Read and replay runs
 
-- `pnpm replay` serves a page that plays runs back side by side on one timeline: the chat, the browser screenshots, and a verdict card when each run ends.
+- `pnpm replay` serves a page that plays runs back side by side on one timeline: the chat, the browser screenshots, and a verdict card when each run ends. It shows every run on your machine.
+- `pnpm export` writes the runs of the public tasks (outside `tasks/private/`) into `replay/public/data/`, without screenshots, and fails if any line of `tasks/private/deny.txt` appears in them. Commit that folder: on a push to `main`, GitHub Pages builds the site from it.
 - `mcp.ts` is an MCP server over the transcripts, so an agent can check a run step by step, screenshots included:
 
   ```sh

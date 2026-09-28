@@ -13,6 +13,8 @@
 		"bench": "node run.ts",
 		"mcp": "node mcp.ts",
 		"replay": "vite",
+		"export": "node export.ts",
+		"build": "vite build",
 		"check": "svelte-check",
 		"clean-downloads": "node clean.ts"
 	},

@@ -1,6 +1,6 @@
-/** One row of a run's `results.jsonl`, as the replay server serves it (see vite.config.ts). */
-import type { Session } from "../session.ts";
+/** What the page reads, and all that is published of a run (see data.ts). */
 import type { Verdict } from "../task.ts";
+import type { Chat } from "./chat/chat.ts";
 
 export type Run = {
 	id: string;
@@ -14,7 +14,7 @@ export type Run = {
 	answer: string;
 };
 
-export type RunWithSession = Run & { session: Session };
+export type RunWithSession = Run & { session: Chat & { models: string[] } };
 
 export const ARM_NAMES: Record<Run["arm"], string> = {
 	reduck: "Reduck MCP",

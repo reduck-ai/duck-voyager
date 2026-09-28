@@ -13,6 +13,8 @@
  * data) and default-export one Task or a list of them.
  */
 import { execFile, execFileSync } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { join, sep } from "node:path";
 import { promisify } from "node:util";
 import type { Session } from "./session.ts";
 
@@ -24,6 +26,20 @@ export type Task = {
 	requires?: () => Verdict | Promise<Verdict>;
 	check?: (run: Run) => Verdict | Promise<Verdict>;
 };
+
+/** Every task in `tasks/`. A private one is under `tasks/private/`: git-ignored, and never
+ *  published with its runs. */
+export async function tasks(): Promise<(Task & { private: boolean })[]> {
+	const dir = join(import.meta.dirname, "tasks");
+	const found = [];
+	for (const f of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
+		if (!f.endsWith(".ts")) continue;
+		const { default: exported } = (await import(join(dir, f))) as { default: Task | Task[] };
+		const isPrivate = f.startsWith(`private${sep}`);
+		found.push(...[exported].flat().map((t) => ({ ...t, private: isPrivate })));
+	}
+	return found;
+}
 
 /** Run a saved Reduck script on the paired browser, through the Reduck CLI, and return its
  *  result. The CLI and both arms drive the same Chrome profile, so what a script sees here is

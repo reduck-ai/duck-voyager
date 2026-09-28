@@ -16,13 +16,13 @@
 </script>
 
 {#if ids.length}
-	{#await Promise.all(ids.map((id) => get(`/api/runs/${id}`))) then runs}
+	{#await Promise.all(ids.map((id) => get(`data/${id}.json`))) then runs}
 		<Compare {runs} />
 	{:catch error}
 		<p>{error.message}</p>
 	{/await}
 {:else}
-	{#await get("/api/runs") then runs}
+	{#await get("data/runs.json") then runs}
 		<Pick {runs} />
 	{:catch error}
 		<p>{error.message}</p>

@@ -33,7 +33,7 @@ import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { parseSession, projectDir } from "./session.ts";
-import type { Task, Verdict } from "./task.ts";
+import { tasks, type Task, type Verdict } from "./task.ts";
 
 type Arm = "reduck" | "chrome";
 const ARMS: Record<Arm, string> = {
@@ -52,13 +52,7 @@ const { values: flags } = parseArgs({
 	}
 });
 const timeoutMs = Number(flags.timeout) * 60_000;
-const taskDir = join(import.meta.dirname, "tasks");
-const tasks: Task[] = [];
-for (const f of readdirSync(taskDir, { recursive: true, encoding: "utf8" })) {
-	if (!f.endsWith(".ts")) continue;
-	const { default: exported } = (await import(join(taskDir, f))) as { default: Task | Task[] };
-	tasks.push(...[exported].flat());
-}
+const all = await tasks();
 const out = join(import.meta.dirname, "runs", new Date().toISOString().replace(/[:.]/g, "-"));
 mkdirSync(out, { recursive: true });
 
@@ -204,7 +198,7 @@ async function run(task: Task, arm: Arm) {
 
 // `requires` before every run, not once per task: a run can change what the next one starts
 // from (a cart, a sign-in), and both arms must start from the same state.
-for (const task of tasks.filter((t) => !flags.task || t.id === flags.task)) {
+for (const task of all.filter((t) => !flags.task || t.id === flags.task)) {
 	for (const arm of ["reduck", "chrome"] as Arm[]) {
 		if (flags.arm && flags.arm !== arm) continue;
 		const ready: Verdict = await Promise.resolve(task.requires?.() ?? { pass: true }).catch(
