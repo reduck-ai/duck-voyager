@@ -35,8 +35,9 @@ export type Session = Chat & {
 	turns: number;
 	tokens: Tokens;
 	/** Prompt size per API call (input + cache read + cache write): what the model had in its
-	 *  context at the first call and at the largest one. */
-	context: { start: number; peak: number };
+	 *  context at the first call and the largest one. `end` is the context the session ends
+	 *  with: the last prompt plus the last response, the final answer included. */
+	context: { start: number; peak: number; end: number };
 	/** What Claude Code billed, in USD, from the transcript's own `cost-state` lines: the total
 	 *  and its split per model. Null for a transcript with none (a subagent's, or an older one).
 	 *  A process writes its line only now and then, so a long or resumed interactive session can
@@ -68,6 +69,7 @@ export function parseSession(path: string): Session {
 	const counted = new Set<string>();
 	const tokens: Tokens = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 	const prompts: number[] = [];
+	let lastOutput = 0;
 	const steps: Step[] = [];
 	const byCallId = new Map<string, ToolStep>();
 	const times: string[] = [];
@@ -87,6 +89,7 @@ export function parseSession(path: string): Session {
 				counted.add(id);
 				tokens.input += usage.input_tokens ?? 0;
 				tokens.output += usage.output_tokens ?? 0;
+				lastOutput = usage.output_tokens ?? 0;
 				tokens.cacheRead += usage.cache_read_input_tokens ?? 0;
 				tokens.cacheWrite += usage.cache_creation_input_tokens ?? 0;
 				prompts.push(
@@ -160,7 +163,7 @@ export function parseSession(path: string): Session {
 		turns: counted.size,
 		steps,
 		tokens,
-		context: { start: prompts[0] ?? 0, peak: Math.max(0, ...prompts) },
+		context: { start: prompts[0] ?? 0, peak: Math.max(0, ...prompts), end: (prompts.at(-1) ?? 0) + lastOutput },
 		cost
 	};
 }

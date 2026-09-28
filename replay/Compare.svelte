@@ -23,6 +23,7 @@
 	import {
 		ARM_NAMES,
 		grader,
+		kTokens,
 		modelName,
 		verdictLabel,
 		outcome,
@@ -132,7 +133,7 @@
 							<div class="metrics">
 								<div><b>{clock(run.wallMs)}</b>time</div>
 								<div><b>${run.costUsd.toFixed(2)}</b>cost</div>
-								<div><b>{run.turns}</b>turns</div>
+								<div><b>{kTokens(run.context)}</b>final context</div>
 							</div>
 							{#if run.verdict?.detail}
 								<button class="why" class:open={whole.has(run.id)} onclick={() => whole.add(run.id)}>

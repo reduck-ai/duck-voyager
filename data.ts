@@ -14,8 +14,8 @@ import type { Task } from "./task.ts";
 
 const RUNS = join(import.meta.dirname, "runs");
 
-/** A run as listed, with where its transcript is. */
-export type Recorded = Run & { transcript: string };
+/** A run as recorded, with where its transcript is: what the transcript says is read from it. */
+export type Recorded = Omit<Run, "context"> & { transcript: string };
 
 /** Every recorded run that still has its transcript. A run's id is its folder under `runs/`,
  *  `<folder>/<task>.<arm>`, the same run.ts writes files to. */
@@ -36,7 +36,6 @@ export function runs(): Recorded[] {
 				verdict: row.verdict,
 				outcome: row.outcome,
 				wallMs: row.wallMs,
-				turns: row.turns,
 				costUsd: row.costUsd,
 				answer: row.answer,
 				transcript: row.session
@@ -44,7 +43,10 @@ export function runs(): Recorded[] {
 	});
 }
 
-export const listed = ({ transcript: _, ...run }: Recorded): Run => run;
+export const listed = (run: Recorded): Run => {
+	const { session: _, ...rest } = withSession(run);
+	return rest;
+};
 
 /** The tasks that have runs, each with its trials newest first (Reduck MCP first within one);
  *  the task run most recently first. A run whose task file is gone is left out: there is
@@ -66,6 +68,6 @@ export function index(runs: Run[], tasks: Task[]): TaskTrials[] {
 }
 
 export function withSession({ transcript, ...run }: Recorded): RunWithSession {
-	const { ask, start, durationMs, steps, models } = parseSession(transcript);
-	return { ...run, session: { ask, start, durationMs, steps, models } };
+	const { ask, start, durationMs, steps, models, context } = parseSession(transcript);
+	return { ...run, context: context.end, session: { ask, start, durationMs, steps, models } };
 }

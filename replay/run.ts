@@ -9,8 +9,9 @@ export type Run = {
 	verdict: Verdict | null;
 	outcome: string;
 	wallMs: number;
-	turns: number;
 	costUsd: number;
+	/** Tokens in the model's context at its last call: what the task cost it to hold. */
+	context: number;
 	answer: string;
 };
 
@@ -28,7 +29,9 @@ export const ARM_NAMES: Record<Run["arm"], string> = {
 	chrome: "Claude with Chrome MCP"
 };
 
-export const verdictLabel = (run: Run) =>
+export const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
+
+export const verdictLabel =(run: Run) =>
 	run.verdict ? (run.verdict.pass ? "✓ Passed" : "✗ Failed") : "Not graded";
 
 const GRADERS: Record<NonNullable<Verdict["by"]>, string> = {
@@ -75,7 +78,7 @@ export function outcome(runs: Run[]): { winner: Run | null; lines: Line[]; text:
 		lines = [
 			ratio(winner.wallMs, other.wallMs, "faster", "slower"),
 			ratio(winner.costUsd, other.costUsd, "cheaper", "costlier"),
-			ratio(winner.turns, other.turns, "fewer turns", "more turns")
+			ratio(winner.context, other.context, "smaller context", "larger context")
 		];
 	}
 	const said = lines.map((l) => (l.n ? `${l.n} ${l.word}` : l.word)).join(" · ");
