@@ -1,0 +1,14 @@
+{
+	"compilerOptions": {
+		"target": "ES2024",
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"strict": true,
+		"skipLibCheck": true,
+		"allowImportingTsExtensions": true,
+		"noEmit": true,
+		"verbatimModuleSyntax": true,
+		"types": ["node"]
+	},
+	"include": ["*.ts", "tasks/**/*.ts", "replay/**/*.ts", "replay/**/*.svelte"]
+}
