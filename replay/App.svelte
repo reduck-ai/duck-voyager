@@ -13,10 +13,10 @@
 <script lang="ts">
 	import Compare from "./Compare.svelte";
 	import Home from "./Home.svelte";
+	import Stages from "./Stages.svelte";
 	import type { RunWithSession, Stage, TaskTrials } from "./run.ts";
 
 	const DEV = import.meta.env.DEV;
-	const STAGES: Stage[] = ["raw", "draft", "published"];
 
 	let params = $state(new URLSearchParams(location.search));
 	const stage = $derived((DEV ? (params.get("stage") ?? "raw") : "published") as Stage);
@@ -59,13 +59,7 @@
 	);
 </script>
 
-{#if DEV}
-	<div class="stages" role="group" aria-label="Stage">
-		{#each STAGES as s (s)}
-			<button class:on={stage === s} onclick={() => go({ stage: s })}>{s}</button>
-		{/each}
-	</div>
-{/if}
+{#if DEV}<Stages {stage} pick={(s) => go({ stage: s })} />{/if}
 
 {#if refs.length}
 	{#await Promise.all([tasks, runs]) then [tasks, runs]}
@@ -103,32 +97,5 @@
 	}
 	p {
 		padding: 24px 32px;
-	}
-	/* Over both views, at the top right, where neither puts anything. */
-	.stages {
-		position: fixed;
-		top: 8px;
-		right: 12px;
-		z-index: 3;
-		display: flex;
-		padding: 2px;
-		border-radius: 8px;
-		background: white;
-		box-shadow: 0 0 0 1px var(--line), 0 2px 8px rgb(17 24 39 / 0.08);
-	}
-	.stages button {
-		padding: 3px 10px;
-		border: 0;
-		border-radius: 6px;
-		background: none;
-		font: inherit;
-		font-size: 12px;
-		text-transform: capitalize;
-		color: var(--ink-3);
-		cursor: pointer;
-	}
-	.stages button.on {
-		background: var(--ink);
-		color: #f9fafb;
 	}
 </style>
