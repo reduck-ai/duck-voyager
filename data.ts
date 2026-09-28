@@ -4,7 +4,8 @@
  * of `replay/run.ts`, so nothing the page does not show leaves this machine.
  *
  * `pnpm replay` serves them live from `runs/` and the transcripts (vite.config.ts); `pnpm export`
- * writes the public ones into `replay/public/data/`, which the site is built from (export.ts).
+ * drafts the public ones, and `--approve` moves them into `replay/public/data/`, which the site
+ * is built from (export.ts).
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -13,6 +14,10 @@ import { parseSession } from "./session.ts";
 import type { Task } from "./task.ts";
 
 const RUNS = join(import.meta.dirname, "runs");
+/** A run's export while it is reviewed and redacted (git-ignored), then, once approved, where the
+ *  site is built from. `<id>.json` in both. */
+export const DRAFTS = join(import.meta.dirname, "exports");
+export const PUBLISHED = join(import.meta.dirname, "replay/public/data");
 
 /** A run as recorded, with where its transcript is: what the transcript says is read from it. */
 export type Recorded = Omit<Run, "context"> & { transcript: string };

@@ -1,73 +1,123 @@
 /**
- * Publish runs: add each run named into `replay/public/data/`, the folder that is committed and
- * that the site is built from, then rebuild its index (`tasks.json`) from what the folder holds.
+ * Take runs to the public site in two steps, by name, each a run id as `pnpm replay` shows it:
  *
- *   pnpm export <folder>/<task>.<arm> …    # the ids `pnpm replay` shows
- *   pnpm export                            # only the list: after deleting a run's file
+ *   pnpm export <folder>/<task>.<arm> …            # a draft in `exports/` (git-ignored)
+ *   pnpm export --approve <folder>/<task>.<arm> …  # moved into `replay/public/data/`
+ *   pnpm export --approve                          # only the index and the checks, after
+ *                                                  # deleting a published file
  *
- * A run is published only by name, once a person has read it whole in `pnpm replay`: a trace can
- * hold private data no rule foresees. The checks below are a net under that reading, not a
- * substitute for it. A run must belong to a public task (outside `tasks/private/`). Screenshots
- * are dropped: they show the whole browser. What remains is text, and the export fails, writing
- * nothing, if any line of `tasks/private/deny.txt` (emails, handles, names) or the home
- * directory path appears in it, case ignored. Without that file it does not run.
+ * A trace can hold private data no rule foresees, so a draft is read whole (`read_session` with
+ * `stage: "draft"` in mcp.ts) and edited there (`redact_export`) until it is clean. The
+ * transcript it came from is never edited, and a published file is never edited either: it is
+ * the draft a person approved. `--approve` needs that person's yes; the push that follows is a
+ * second one.
+ *
+ * The checks are a net under that reading, not a substitute for it. A run must belong to a public
+ * task (outside `tasks/private/`). Screenshots are dropped: they show the whole browser. What
+ * remains is text, scrubbed of what this machine puts in every trace (SCRUB). A line of
+ * `tasks/private/deny.txt` (emails, handles, names) or the home directory path, case ignored, is
+ * reported in a draft and refused at approval, for every published file, not only the new ones:
+ * deny.txt grows. Without that file it does not run.
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { index, runs, withSession } from "./data.ts";
+import { parseArgs } from "node:util";
+import { DRAFTS, index, PUBLISHED, runs, withSession } from "./data.ts";
 import type { Run, RunWithSession } from "./replay/run.ts";
 import { tasks } from "./task.ts";
 
 const DENY = join(import.meta.dirname, "tasks/private/deny.txt");
-const OUT = join(import.meta.dirname, "replay/public/data");
 
 if (!existsSync(DENY)) throw new Error(`${DENY} is missing: one private string per line`);
+/** What must never be published, each with how a report names it: printing the string itself
+ *  would put it in the output of whoever ran this, an agent included. */
 const deny = [
-	homedir(),
+	{ text: homedir(), name: "the home directory" },
 	...readFileSync(DENY, "utf8")
 		.split("\n")
-		.map((l) => l.trim())
-		.filter(Boolean)
-].map((s) => s.toLowerCase());
+		.map((l, i) => ({ text: l.trim(), name: `deny.txt line ${i + 1}` }))
+		.filter((d) => d.text)
+].map((d) => ({ ...d, text: d.text.toLowerCase() }));
+const denied = (id: string, text: string) => {
+	const lower = text.toLowerCase();
+	return deny.filter((d) => lower.includes(d.text)).map((d) => `${id}: contains ${d.name}`);
+};
 
-const ids = process.argv.slice(2);
-const recorded = runs();
+/** Rewritten, not refused: Claude Code saves a large tool result under the home directory, in a
+ *  folder named after the run's working directory, a temp folder, and the agent reads it back
+ *  with Bash; Google's CAPTCHA page prints the visitor's IP (its `/sorry/` URL encodes it too).
+ *  An email address is masked wherever it appears, even one a stranger made public in a bio. */
+const TMP = realpathSync(tmpdir());
+const SCRUB: [string | RegExp, string][] = [
+	[homedir(), "~"],
+	[TMP, "$TMPDIR"],
+	[tmpdir(), "$TMPDIR"],
+	[TMP.replace(/[^a-zA-Z0-9]/g, "-"), "-TMPDIR"],
+	[/(https?:\/\/(?:www\.)?google\.[a-z.]+\/sorry\/)[^\s"\\]*/g, "$1…"],
+	[/(IP address: ?)[0-9a-f.:]+/gi, "$1…"],
+	[/[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}\b/gi, "…@…"]
+];
+const scrub = (text: string) =>
+	SCRUB.reduce((t, [from, to]) => (typeof from === "string" ? t.replaceAll(from, to) : t.replace(from, to)), text);
+
+const { values, positionals: ids } = parseArgs({
+	options: { approve: { type: "boolean", default: false } },
+	allowPositionals: true
+});
 const allTasks = await tasks();
 const publicTasks = new Set(allTasks.filter((t) => !t.private).map((t) => t.id));
+const file = (dir: string, id: string) => join(dir, `${id}.json`);
+const write = (path: string, text: string) => {
+	mkdirSync(dirname(path), { recursive: true });
+	writeFileSync(path, text);
+};
 
-const files = new Map<string, string>();
+if (!values.approve) {
+	const recorded = runs();
+	for (const id of ids) {
+		const r = recorded.find((r) => r.id === id);
+		if (!r) console.error(`${id}: no such run with a transcript`);
+		else if (!publicTasks.has(r.task)) console.error(`${id}: task ${r.task} is private`);
+		else if (existsSync(file(PUBLISHED, id))) console.error(`${id}: already published`);
+		else {
+			const run = withSession(r);
+			for (const s of run.session.steps) if (s.kind === "tool") s.images = [];
+			const text = scrub(JSON.stringify(run));
+			write(file(DRAFTS, id), text);
+			const found = denied(id, text);
+			console.log(`${id}: draft written${found.length ? `, still to redact:\n  ${found.join("\n  ")}` : ""}`);
+		}
+	}
+	process.exit(0);
+}
+
+const published = existsSync(PUBLISHED)
+	? readdirSync(PUBLISHED, { recursive: true, encoding: "utf8" })
+			.filter((f) => f.endsWith(".json") && f !== "tasks.json")
+			.map((f) => f.slice(0, -".json".length))
+	: [];
+const texts = new Map(published.map((id) => [id, readFileSync(file(PUBLISHED, id), "utf8")]));
 const problems: string[] = [];
 for (const id of ids) {
-	const r = recorded.find((r) => r.id === id);
-	if (!r) problems.push(`${id}: no such run with a transcript`);
-	else if (!publicTasks.has(r.task)) problems.push(`${id}: task ${r.task} is private`);
-	else {
-		const run = withSession(r);
-		for (const s of run.session.steps) if (s.kind === "tool") s.images = [];
-		const text = JSON.stringify(run);
-		const lower = text.toLowerCase();
-		for (const s of deny) if (lower.includes(s)) problems.push(`${id}: contains "${s}"`);
-		files.set(`${id}.json`, text);
-	}
+	if (!existsSync(file(DRAFTS, id))) problems.push(`${id}: no draft (pnpm export ${id})`);
+	else if (texts.has(id)) problems.push(`${id}: already published`);
+	else texts.set(id, readFileSync(file(DRAFTS, id), "utf8"));
 }
+for (const [id, text] of texts) problems.push(...denied(id, text));
 if (problems.length) {
-	console.error(`nothing written:\n${problems.join("\n")}`);
+	console.error(`nothing moved:\n${problems.join("\n")}`);
 	process.exit(1);
 }
 
-for (const [path, text] of files) {
-	mkdirSync(dirname(join(OUT, path)), { recursive: true });
-	writeFileSync(join(OUT, path), text);
+for (const id of ids) {
+	mkdirSync(dirname(file(PUBLISHED, id)), { recursive: true });
+	renameSync(file(DRAFTS, id), file(PUBLISHED, id));
 }
-
-// The list is whatever the folder holds, so deleting a run's file and running this unpublishes it.
-mkdirSync(OUT, { recursive: true });
-const published: Run[] = readdirSync(OUT, { recursive: true, encoding: "utf8" })
-	.filter((f) => f.endsWith(".json") && f !== "tasks.json")
-	.map((f) => {
-		const { session: _, ...run }: RunWithSession = JSON.parse(readFileSync(join(OUT, f), "utf8"));
-		return run;
-	});
-writeFileSync(join(OUT, "tasks.json"), JSON.stringify(index(published, allTasks)));
-console.log(`${files.size} added, ${published.length} published → ${OUT}`);
+// The index is whatever the folder holds, so deleting a run's file and running this unpublishes it.
+const listed: Run[] = [...texts.values()].map((text) => {
+	const { session: _, ...run }: RunWithSession = JSON.parse(text);
+	return run;
+});
+write(join(PUBLISHED, "tasks.json"), JSON.stringify(index(listed, allTasks)));
+console.log(`${ids.length} approved, ${listed.length} published → ${PUBLISHED}`);
