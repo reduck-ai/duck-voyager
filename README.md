@@ -1,6 +1,6 @@
 # duck-voyager
 
-A benchmark for AI agents doing real tasks in a browser. The same agent (Claude Code, through the Agent SDK) gets the same prompt twice, once per arm, with exactly one browser tool:
+A benchmark for AI agents doing real tasks in a browser, by [Reduck AI](https://reduck.ai). Replays: https://voyager.reduck.ai. The same agent (Claude Code, through the Agent SDK) gets the same prompt twice, once per arm, with exactly one browser tool:
 
 - **reduck**: the [Reduck](https://reduck.ai) MCP server, which runs saved browser scripts.
 - **chrome**: Claude in Chrome (`--chrome`).

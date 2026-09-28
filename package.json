@@ -5,6 +5,7 @@
 	"description": "Benchmark agents on browser tasks (Reduck MCP vs Claude in Chrome), each task a prompt plus an optional check, read their Claude Code sessions over MCP, and replay them side by side",
 	"license": "MIT",
 	"repository": "github:reduck-ai/duck-voyager",
+	"homepage": "https://voyager.reduck.ai",
 	"packageManager": "pnpm@10.34.5",
 	"engines": {
 		"node": ">=22.18"
