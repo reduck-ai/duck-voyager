@@ -14,9 +14,10 @@ A task is a file in `tasks/` that default-exports a `Task` (or a list of them):
 ```ts
 {
   id: "hn-dropbox",
+  name: "The Dropbox launch post on Hacker News",
   prompt: "Find the Hacker News post where Dropbox's founder first showed it…",
   requires?: () => Verdict,   // precondition, checked before every run; the run is skipped if it fails
-  check?: (run) => Verdict,   // the verdict, from the answer, the parsed session and the downloaded files
+  check?: (run) => Verdict,   // { pass, detail, by }: from the answer, the parsed session and the downloaded files
 }
 ```
 
@@ -31,6 +32,7 @@ pnpm install
 npx @reduck-ai/cli@latest login          # or set REDUCK_API_KEY
 pnpm bench                               # every task, both arms
 pnpm bench --task hn-dropbox --arm reduck --timeout 10
+pnpm bench --task hn-dropbox --arm chrome --trial <folder>   # join that trial, next to its reduck run
 ```
 
 Each call writes `runs/<time>/results.jsonl`, one row per run, and moves every file the run downloaded into `runs/<time>/<task>.<arm>/files/`. Runs are sequential because both arms download into the same `~/Downloads`.
@@ -39,7 +41,8 @@ Each call writes `runs/<time>/results.jsonl`, one row per run, and moves every f
 
 ## Read and replay runs
 
-- `pnpm replay` serves a page that plays runs back side by side on one timeline: the chat, the browser screenshots, and a verdict card when each run ends. It shows every run on your machine.
+- `pnpm replay` serves a page with one card per task: what kind of eval it is and who did better, by how much, in its latest trial. A trial is one `pnpm bench` call's runs of a task, one per tool. Opening a card shows the whole prompt, a picker of its trials, each run's verdict and numbers, and Replay: the two runs side by side on one timeline, the chat, the browser screenshots, and a result card when each run ends. It shows every run on your machine.
+- `pnpm grade <run id> pass|fail "<why>"` records a person's verdict, for a task no code can grade.
 - `pnpm export <run id> …` publishes the runs you name, once you have read each one whole in `pnpm replay`: a trace can hold private data no rule foresees. It writes them into `replay/public/data/` without screenshots, and refuses a run of a task under `tasks/private/` or one that contains any line of `tasks/private/deny.txt`. Commit that folder: on a push to `main`, GitHub Pages builds the site from it.
 - `mcp.ts` is an MCP server over the transcripts, so an agent can check a run step by step, screenshots included:
 

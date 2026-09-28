@@ -4,6 +4,12 @@
  *   pnpm bench                          # every task, both arms
  *   pnpm bench --task t1 --arm chrome --timeout 10   # minutes per run, default 15
  *   REDUCK_MCP_URL=https://… REDUCK_API_KEY=… pnpm bench --arm reduck
+ *   pnpm bench --task t1 --arm chrome --trial 2026-09-28T06-01-13-893Z
+ *
+ * One call is one trial: its runs go into `runs/<time>/`, and the runs of a task there, one per
+ * arm, are what the replay page compares. `--trial <folder>` joins an existing trial instead, so
+ * an arm run on its own sits next to the other arm's run; it refuses a task and arm the trial
+ * already has.
  *
  * REDUCK_MCP_URL picks the Reduck the runs and the `requires` checks both reach (the CLI reads
  * it too). REDUCK_API_KEY, when set, is used instead of the Reduck CLI's OAuth login.
@@ -21,6 +27,7 @@ import { query, type Options, type SDKResultMessage } from "@anthropic-ai/claude
 import { execFileSync } from "node:child_process";
 import {
 	appendFileSync,
+	existsSync,
 	mkdirSync,
 	mkdtempSync,
 	readFileSync,
@@ -48,13 +55,30 @@ const { values: flags } = parseArgs({
 	options: {
 		task: { type: "string" },
 		arm: { type: "string" },
-		timeout: { type: "string", default: "15" }
+		timeout: { type: "string", default: "15" },
+		trial: { type: "string" }
 	}
 });
 const timeoutMs = Number(flags.timeout) * 60_000;
 const all = await tasks();
-const out = join(import.meta.dirname, "runs", new Date().toISOString().replace(/[:.]/g, "-"));
+const out = join(
+	import.meta.dirname,
+	"runs",
+	flags.trial ?? new Date().toISOString().replace(/[:.]/g, "-")
+);
+if (flags.trial && !existsSync(out)) throw new Error(`no trial ${flags.trial} in runs/`);
 mkdirSync(out, { recursive: true });
+/** The task and arm pairs the trial already has, when joining one. */
+const taken = new Set(
+	existsSync(join(out, "results.jsonl"))
+		? readFileSync(join(out, "results.jsonl"), "utf8")
+				.split("\n")
+				.filter(Boolean)
+				.map((line) => JSON.parse(line))
+				.filter((row) => !row.skipped)
+				.map((row) => `${row.task}.${row.arm}`)
+		: []
+);
 
 /** Reduck credentials: an API key when set, else the Reduck CLI's OAuth token, refreshed by
  *  `whoami` because it lives one hour. */
@@ -201,6 +225,10 @@ async function run(task: Task, arm: Arm) {
 for (const task of all.filter((t) => !flags.task || t.id === flags.task)) {
 	for (const arm of ["reduck", "chrome"] as Arm[]) {
 		if (flags.arm && flags.arm !== arm) continue;
+		if (taken.has(`${task.id}.${arm}`)) {
+			console.log(`${`${task.id}.${arm}`.padEnd(22)} SKIP  trial ${flags.trial} already has it`);
+			continue;
+		}
 		const ready: Verdict = await Promise.resolve(task.requires?.() ?? { pass: true }).catch(
 			(e: unknown) => ({ pass: false, detail: e instanceof Error ? e.message : String(e) })
 		);

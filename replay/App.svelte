@@ -1,12 +1,18 @@
 <!--
-	`?run=<id>&run=<id>` compares those runs; without one, the list to pick them from. The
-	address is the whole state, so a replay is a link.
+	`?run=<id>&run=<id>` compares those runs; without one, every task with its results. `&t=` starts
+	the replay at a moment: `m:ss` as the timeline shows it, seconds, or `end`. The address is the
+	whole state, so a replay is a link.
 -->
 <script lang="ts">
 	import Compare from "./Compare.svelte";
-	import Pick from "./Pick.svelte";
+	import Home from "./Home.svelte";
+	import type { TaskTrials } from "./run.ts";
 
-	const ids = new URLSearchParams(location.search).getAll("run");
+	const params = new URLSearchParams(location.search);
+	const ids = params.getAll("run");
+	const t = params.get("t") ?? "0";
+	const at =
+		t === "end" ? Infinity : t.split(":").reduce((s, part) => s * 60 + Number(part), 0) * 1000 || 0;
 
 	async function get(path: string) {
 		const r = await fetch(path);
@@ -16,14 +22,14 @@
 </script>
 
 {#if ids.length}
-	{#await Promise.all(ids.map((id) => get(`data/${id}.json`))) then runs}
-		<Compare {runs} />
+	{#await Promise.all([get("data/tasks.json"), ...ids.map((id) => get(`data/${id}.json`))]) then [tasks, ...runs]}
+		<Compare {runs} {at} task={(tasks as TaskTrials[]).find((t) => t.id === runs[0].task)} />
 	{:catch error}
 		<p>{error.message}</p>
 	{/await}
 {:else}
-	{#await get("data/runs.json") then runs}
-		<Pick {runs} />
+	{#await get("data/tasks.json") then tasks}
+		<Home {tasks} />
 	{:catch error}
 		<p>{error.message}</p>
 	{/await}

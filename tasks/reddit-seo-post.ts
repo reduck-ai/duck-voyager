@@ -6,6 +6,7 @@ const POST = "1wf6cgk";
 
 export default {
 	id: "reddit-seo-post",
+	name: "A Reddit post from a vague memory",
 	prompt:
 		"On https://www.reddit.com/r/GrowthHacking/ I saw a post that talks about SEO, with 3 parts, and one of them mentioned using German for high coverage. Find it. It's recent. Use a Google search filtered on Reddit (site:) to find the post, because Google indexes it better. Give me its link.",
 	check: ({ answer }) => ({

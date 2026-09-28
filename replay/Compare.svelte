@@ -1,21 +1,44 @@
 <!--
 	Recorded runs side by side on one timeline, as long as the longest of them, each from its own
-	start. A run that has finished is marked on the timeline, and its lane greys out under what it
-	came to: the verdict, its time, its cost. Once two runs have both finished, a card between
-	them says how the first to finish compares to the other. A click on a run's screen moves it
-	over the lane next to it, larger, until it is closed.
+	start, under the task they ran. A run that has finished is marked on the timeline, and its lane
+	greys out under what it came to: the verdict and why, its time, its cost. Once two runs have both finished, a card between
+	them names the winner and why (see `outcome` in run.ts). A card closes into a "Show results"
+	button in its lane's header, which brings it back; the card between them shows while no card
+	is closed. A lane collapses into a thin rail, and
+	the others take its room; one at most, so there is always a comparison to go back to. A click on a run's screen moves it over the lane next to it, larger, until it is
+	closed.
+
+	`at` is the moment to open on, in ms; Infinity for the end.
 -->
 <script lang="ts">
 	import { faMedal, faXmark } from "@fortawesome/free-solid-svg-icons";
 	import { FontAwesomeIcon } from "@fortawesome/svelte-fontawesome";
-	import { scale } from "svelte/transition";
+	import { untrack } from "svelte";
+	import { SvelteSet } from "svelte/reactivity";
+	import { fade, scale } from "svelte/transition";
 	import Chat from "./chat/Chat.svelte";
 	import { screenAt } from "./chat/chat.ts";
 	import Screen, { receive, send } from "./chat/Screen.svelte";
 	import Timeline, { clock } from "./chat/Timeline.svelte";
-	import { ARM_NAMES, modelName, type RunWithSession } from "./run.ts";
+	import {
+		ARM_NAMES,
+		grader,
+		modelName,
+		verdictLabel,
+		outcome,
+		type RunWithSession,
+		type TaskTrials
+	} from "./run.ts";
 
-	let { runs }: { runs: RunWithSession[] } = $props();
+	let {
+		runs,
+		task,
+		at = 0
+	}: { runs: RunWithSession[]; task?: TaskTrials; at?: number } = $props();
+
+	/** The runs whose result card is closed, and those whose reason is shown whole. */
+	const closed = new SvelteSet<string>();
+	const whole = new SvelteSet<string>();
 
 	/** The run whose screen is shown large, and the lane it covers: the next, or for the last
 	 *  run the one before. */
@@ -24,60 +47,99 @@
 		staged === null ? null : staged === runs.length - 1 ? staged - 1 : staged + 1
 	);
 
-	let t = $state(0);
-
-	/** Two runs, from the side of the one that finished first: each metric as a ratio, worded
-	 *  for whichever way it goes. */
-	const versus = $derived.by(() => {
-		if (runs.length !== 2) return null;
-		const [first, other] = [...runs].sort((a, b) => a.session.durationMs - b.session.durationMs);
-		const ratio = (mine: number, theirs: number, better: string, worse: string) =>
-			mine <= theirs
-				? { n: `${(theirs / mine).toFixed(1)}×`, word: better }
-				: { n: `${(mine / theirs).toFixed(1)}×`, word: worse };
-		return {
-			first,
-			lines: [
-				ratio(first.session.durationMs, other.session.durationMs, "faster", "slower"),
-				ratio(first.costUsd, other.costUsd, "cheaper", "costlier"),
-				ratio(first.turns, other.turns, "fewer turns", "more turns")
-			]
-		};
-	});
 	const duration = $derived(Math.max(...runs.map((r) => r.session.durationMs)));
+	let t = $state(untrack(() => Math.min(at, duration)));
+
+	/** The run whose lane is collapsed: one at most. Collapsing puts back any large screen,
+	 *  which covers the lane next to its own. */
+	let collapsed = $state<string | null>(null);
+	const collapse = (id: string) => {
+		collapsed = id;
+		staged = null;
+	};
+	/** The edge a lane folds toward: the last lane's is its right, every other's its left. */
+	const side = (i: number) => (i > 0 && i === runs.length - 1 ? "right" : "left");
+	const columns = $derived(
+		runs.map((r) => (r.id === collapsed ? "44px" : "minmax(0, 1fr)")).join(" ")
+	);
+
+	const result = $derived(runs.length === 2 ? outcome(runs) : null);
 	const marks = $derived(
 		runs.map((r) => ({ at: r.session.durationMs, label: ARM_NAMES[r.arm] }))
 	);
 </script>
 
+<!-- A panel with a bar on the edge it folds toward, as in Google's notebook. -->
+{#snippet panel(edge: "left" | "right")}
+	<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+		<rect x="1.75" y="1.75" width="12.5" height="12.5" rx="3.5" fill="none" stroke="currentColor" stroke-width="1.5" />
+		<rect x={edge === "left" ? 4.5 : 9.5} y="4.5" width="2" height="7" rx="1" fill="currentColor" />
+	</svg>
+{/snippet}
+
 <div class="compare">
-	<div class="lanes">
+	<nav>
+		<a href="./">← All tasks</a>
+		{#if task}<strong>{task.name}</strong>{/if}
+	</nav>
+	<div class="lanes" style:grid-template-columns={columns}>
 		{#each runs as run, i (run.id)}
 			{@const done = t >= run.session.durationMs}
 			<section>
+				{#if collapsed === run.id}
+					<button class="rail" onclick={() => (collapsed = null)} title="Expand">
+						{@render panel(side(i))}
+						<span>{ARM_NAMES[run.arm]}</span>
+						{#if done}<span>{verdictLabel(run)}</span>{/if}
+					</button>
+				{:else}
 				<header>
 					<span>
 						<strong>{ARM_NAMES[run.arm]}</strong>
 						<span class="model">· {run.session.models.map(modelName).join(", ")}</span>
+					</span>
+					<span class="actions">
+						{#if done && closed.has(run.id)}
+							<button
+								class="results"
+								onclick={() => closed.delete(run.id)}
+								in:receive={{ key: run }}
+								out:send={{ key: run }}
+							>
+								Show results
+							</button>
+						{/if}
+						{#if runs.length > 1}
+							<button class="collapse" onclick={() => collapse(run.id)} title="Collapse">
+								{@render panel(side(i))}
+							</button>
+						{/if}
 					</span>
 				</header>
 				<Chat
 					chat={run.session}
 					{t}
 					expanded={staged === i}
-					onexpand={runs.length > 1 ? () => (staged = i) : undefined}
+					onexpand={runs.length > 1 && !collapsed ? () => (staged = i) : undefined}
 				/>
-				{#if done}
-					<div class="veil">
-						<div class="card">
-							<div class="verdict">
-								{run.verdict ? (run.verdict.pass ? "✓ Passed" : "✗ Failed") : "Done"}
-							</div>
+				{#if done && !closed.has(run.id)}
+					<div class="veil" transition:fade={{ duration: 200 }}>
+						<div class="card" in:receive={{ key: run }} out:send={{ key: run }}>
+							<button class="close" onclick={() => closed.add(run.id)} aria-label="Close">
+								<FontAwesomeIcon icon={faXmark} />
+							</button>
+							<div class="verdict">{verdictLabel(run)}</div>
 							<div class="metrics">
-								<div><b>{clock(run.session.durationMs)}</b>time</div>
+								<div><b>{clock(run.wallMs)}</b>time</div>
 								<div><b>${run.costUsd.toFixed(2)}</b>cost</div>
 								<div><b>{run.turns}</b>turns</div>
 							</div>
+							{#if run.verdict?.detail}
+								<button class="why" class:open={whole.has(run.id)} onclick={() => whole.add(run.id)}>
+									<span>Why, by {grader(run.verdict)}:</span>
+									{run.verdict.detail}
+								</button>
+							{/if}
 						</div>
 					</div>
 				{/if}
@@ -94,15 +156,16 @@
 						{#if screen}<Screen {screen} />{/if}
 					</div>
 				{/if}
+				{/if}
 			</section>
 		{/each}
-		{#if versus && t >= duration}
+		{#if result?.winner && t >= duration && !closed.size && !collapsed}
 			<div class="versus" transition:scale={{ start: 0.9, duration: 300 }}>
 				<div class="winner">
 					<FontAwesomeIcon icon={faMedal} />
-					{ARM_NAMES[versus.first.arm]} wins
+					{ARM_NAMES[result.winner.arm]} wins
 				</div>
-				{#each versus.lines as line}<div><b>{line.n}</b> {line.word}</div>{/each}
+				{#each result.lines as line}<div>{#if line.n}<b>{line.n}</b>{/if} {line.word}</div>{/each}
 			</div>
 		{/if}
 	</div>
@@ -115,6 +178,20 @@
 		display: flex;
 		flex-direction: column;
 		background: #f5f4ef;
+	}
+	nav {
+		display: flex;
+		gap: 16px;
+		align-items: baseline;
+		padding: 10px 16px;
+		border-bottom: 1px solid rgb(11 11 11 / 0.1);
+	}
+	nav a {
+		color: #7b7a74;
+		text-decoration: none;
+	}
+	nav a:hover {
+		color: #0b0b0b;
 	}
 	.lanes {
 		position: relative;
@@ -137,6 +214,7 @@
 	header {
 		display: flex;
 		justify-content: space-between;
+		align-items: center;
 		padding: 8px 16px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -202,12 +280,80 @@
 		cursor: pointer;
 		color: #3d3d3a;
 	}
+	.actions {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+	.collapse {
+		padding: 0;
+		border: 0;
+		background: none;
+		font-size: 15px;
+		color: #7b7a74;
+		cursor: pointer;
+	}
+	.collapse:hover {
+		color: #0b0b0b;
+	}
+	/* A collapsed lane: its tool and grade, read top to bottom, and a click opens it again. */
+	.rail {
+		grid-row: 1 / -1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 12px;
+		padding: 12px 0;
+		border: 0;
+		background: #e9e8e2;
+		font: inherit;
+		font-size: 13px;
+		color: #3d3d3a;
+		cursor: pointer;
+	}
+	.rail span {
+		writing-mode: vertical-rl;
+		white-space: nowrap;
+	}
+	.rail:hover {
+		background: #deddd6;
+	}
+	.results {
+		padding: 4px 12px;
+		border: 0;
+		border-radius: 6px;
+		background: #0b0b0b;
+		color: white;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+	}
+	.results:hover {
+		background: #3d3d3a;
+	}
+	/* The veil lets clicks through to the chat; its card takes them back. */
 	.card {
+		position: relative;
+		pointer-events: auto;
 		padding: 20px 28px;
 		border-radius: 12px;
 		background: white;
 		box-shadow: 0 4px 24px rgb(11 11 11 / 0.12);
 		text-align: center;
+	}
+	.close {
+		position: absolute;
+		top: 8px;
+		right: 10px;
+		border: 0;
+		background: none;
+		font-size: 16px;
+		color: #7b7a74;
+		cursor: pointer;
+	}
+	.close:hover {
+		color: #0b0b0b;
 	}
 	.verdict {
 		font-size: 16px;
@@ -219,6 +365,33 @@
 		gap: 28px;
 		color: #7b7a74;
 		font-size: 12px;
+	}
+	/* Cut to three lines until clicked. */
+	.why {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		max-width: 320px;
+		margin-top: 14px;
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		font-size: 13px;
+		line-height: 18px;
+		text-align: left;
+		color: #3d3d3a;
+		cursor: pointer;
+	}
+	.why.open {
+		-webkit-line-clamp: unset;
+		line-clamp: unset;
+		cursor: auto;
+	}
+	.why span {
+		color: #7b7a74;
 	}
 	.metrics b {
 		display: block;

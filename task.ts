@@ -13,28 +13,36 @@
  * data) and default-export one Task or a list of them.
  */
 import { execFile, execFileSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { readdirSync, statSync } from "node:fs";
 import { join, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Session } from "./session.ts";
 
 export type Run = { answer: string; session: Session | null; files: string[] };
-export type Verdict = { pass: boolean; detail?: string };
+/** Whether a run succeeded, why, and who decided: the task's `check` (the default), a model it
+ *  asked as a judge, or a person (`pnpm grade`) for a task no code can grade. */
+export type Verdict = { pass: boolean; detail?: string; by?: "check" | "model" | "person" };
 export type Task = {
 	id: string;
+	/** A short title for the people reading the results; `prompt`, what the agent gets, says
+	 *  the rest. */
+	name: string;
 	prompt: string;
 	requires?: () => Verdict | Promise<Verdict>;
 	check?: (run: Run) => Verdict | Promise<Verdict>;
 };
 
 /** Every task in `tasks/`. A private one is under `tasks/private/`: git-ignored, and never
- *  published with its runs. */
+ *  published with its runs. A file is imported again when it changes, so a long-lived process
+ *  (the `pnpm replay` server) serves what is on disk. */
 export async function tasks(): Promise<(Task & { private: boolean })[]> {
 	const dir = join(import.meta.dirname, "tasks");
 	const found = [];
 	for (const f of readdirSync(dir, { recursive: true, encoding: "utf8" })) {
 		if (!f.endsWith(".ts")) continue;
-		const { default: exported } = (await import(join(dir, f))) as { default: Task | Task[] };
+		const url = `${pathToFileURL(join(dir, f)).href}?v=${statSync(join(dir, f)).mtimeMs}`;
+		const { default: exported } = (await import(url)) as { default: Task | Task[] };
 		const isPrivate = f.startsWith(`private${sep}`);
 		found.push(...[exported].flat().map((t) => ({ ...t, private: isPrivate })));
 	}

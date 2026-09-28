@@ -10,7 +10,8 @@
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import type { ServerResponse } from "node:http";
 import { defineConfig, type Plugin } from "vite";
-import { listed, runs, withSession } from "./data.ts";
+import { index, listed, runs, withSession } from "./data.ts";
+import { tasks } from "./task.ts";
 
 function send(res: ServerResponse, body: unknown) {
 	res.setHeader("content-type", "application/json");
@@ -21,9 +22,9 @@ function send(res: ServerResponse, body: unknown) {
 const live: Plugin = {
 	name: "live-data",
 	configureServer(server) {
-		server.middlewares.use("/data", (req, res) => {
+		server.middlewares.use("/data", async (req, res) => {
 			const path = decodeURIComponent((req.url ?? "/").split("?")[0].slice(1));
-			if (path === "runs.json") return send(res, runs().map(listed));
+			if (path === "tasks.json") return send(res, index(runs().map(listed), await tasks()));
 			const run = runs().find((r) => `${r.id}.json` === path);
 			if (run) return send(res, withSession(run));
 			res.statusCode = 404;

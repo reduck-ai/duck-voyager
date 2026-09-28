@@ -14,6 +14,7 @@ const POST = "item?id=8863";
 
 export default {
 	id: "hn-dropbox",
+	name: "The Dropbox launch post on Hacker News",
 	prompt: "Find the Hacker News post where Dropbox's founder first showed it, back in 2007. Give me its link.",
 	check: ({ answer }) => ({
 		pass: answer.includes(POST),

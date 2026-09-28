@@ -1,5 +1,5 @@
 /** What the page reads, and all that is published of a run (see data.ts). */
-import type { Verdict } from "../task.ts";
+import type { Task, Verdict } from "../task.ts";
 import type { Chat } from "./chat/chat.ts";
 
 export type Run = {
@@ -16,10 +16,99 @@ export type Run = {
 
 export type RunWithSession = Run & { session: Chat & { models: string[] } };
 
+/** The runs of one task from one `pnpm bench` call, at most one per arm: what the page
+ *  compares. Its id is the call's folder, which every run id starts with. */
+export type Trial = { id: string; runs: Run[] };
+
+/** A task and its trials, newest first: `data/tasks.json` is a list of these. */
+export type TaskTrials = Pick<Task, "id" | "name" | "prompt"> & { trials: Trial[] };
+
 export const ARM_NAMES: Record<Run["arm"], string> = {
-	reduck: "Reduck MCP",
-	chrome: "Claude in Chrome"
+	reduck: "Claude with Reduck MCP",
+	chrome: "Claude with Chrome MCP"
 };
+
+export const verdictLabel = (run: Run) =>
+	run.verdict ? (run.verdict.pass ? "✓ Passed" : "✗ Failed") : "Not graded";
+
+const GRADERS: Record<NonNullable<Verdict["by"]>, string> = {
+	check: "the check",
+	model: "a model",
+	person: "a person"
+};
+export const grader = (verdict: Verdict) => GRADERS[verdict.by ?? "check"];
+
+/** When a trial started: its id is the ISO time of its `pnpm bench` call, with `-` for `:`
+ *  and `.`. */
+export const day = (trial: Trial) =>
+	new Date(trial.id.replace(/T(\d\d)-(\d\d)-(\d\d)-(\d+)Z$/, "T$1:$2:$3.$4Z")).toLocaleString("en-GB", {
+		day: "numeric",
+		month: "short",
+		hour: "2-digit",
+		minute: "2-digit"
+	});
+
+type Line = { n: string; word: string };
+
+/** Who won a trial, and why. A run must pass to win: when only one did, it wins and that is
+ *  the whole story; when both did, the faster wins, with each metric as a ratio worded for
+ *  whichever way it goes. No winner when a run is missing, ungraded, or both failed. */
+export function outcome(runs: Run[]): { winner: Run | null; lines: Line[]; text: string } {
+	const [a, b] = runs;
+	if (!b) return { winner: null, lines: [], text: `Only ${ARM_NAMES[a.arm]} ran` };
+	if (!a.verdict || !b.verdict) return { winner: null, lines: [], text: "Not graded yet" };
+	const passed = runs.filter((r) => r.verdict?.pass);
+	if (!passed.length) return { winner: null, lines: [], text: "Both failed" };
+	let winner: Run;
+	let lines: Line[];
+	if (passed.length === 1) {
+		winner = passed[0];
+		const loser = winner === a ? b : a;
+		lines = [{ n: "", word: `${ARM_NAMES[loser.arm]} failed` }];
+	} else {
+		const other = a.wallMs <= b.wallMs ? b : a;
+		winner = other === a ? b : a;
+		const ratio = (mine: number, theirs: number, better: string, worse: string): Line =>
+			mine <= theirs
+				? { n: `${(theirs / mine).toFixed(1)}×`, word: better }
+				: { n: `${(mine / theirs).toFixed(1)}×`, word: worse };
+		lines = [
+			ratio(winner.wallMs, other.wallMs, "faster", "slower"),
+			ratio(winner.costUsd, other.costUsd, "cheaper", "costlier"),
+			ratio(winner.turns, other.turns, "fewer turns", "more turns")
+		];
+	}
+	const said = lines.map((l) => (l.n ? `${l.n} ${l.word}` : l.word)).join(" · ");
+	return { winner, lines, text: `${ARM_NAMES[winner.arm]} won · ${said}` };
+}
+
+/** The trial a task is shown by: its newest with both tools, else its newest. */
+export const latest = (task: TaskTrials): Trial =>
+	task.trials.find((t) => t.runs.length > 1) ?? task.trials[0];
+
+/** Each tool over the latest trial of every task: how many of its graded runs passed, and its
+ *  mean time and cost over the tasks both tools passed, so that a fast failure does not pass
+ *  for speed. */
+export function scoreboard(tasks: TaskTrials[]) {
+	const trials = tasks.map(latest).filter((t) => t.runs.length > 1);
+	const bothPassed = trials.filter((t) => t.runs.every((r) => r.verdict?.pass));
+	const mean = (xs: number[]) => xs.reduce((s, x) => s + x, 0) / (xs.length || 1);
+	const arms = Object.keys(ARM_NAMES) as Run["arm"][];
+	return {
+		compared: bothPassed.length,
+		arms: arms.map((arm) => {
+			const mine = (ts: Trial[]) => ts.flatMap((t) => t.runs.filter((r) => r.arm === arm));
+			const graded = mine(trials).filter((r) => r.verdict);
+			return {
+				arm,
+				passed: graded.filter((r) => r.verdict!.pass).length,
+				graded: graded.length,
+				ms: mean(mine(bothPassed).map((r) => r.wallMs)),
+				usd: mean(mine(bothPassed).map((r) => r.costUsd))
+			};
+		})
+	};
+}
 
 /** A model id as people say it: `claude-opus-5-5` is "Opus 5.5". An id of another shape is
  *  shown as it is. */

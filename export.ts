@@ -1,6 +1,6 @@
 /**
  * Publish runs: add each run named into `replay/public/data/`, the folder that is committed and
- * that the site is built from, then rebuild its list from what the folder holds.
+ * that the site is built from, then rebuild its index (`tasks.json`) from what the folder holds.
  *
  *   pnpm export <folder>/<task>.<arm> …    # the ids `pnpm replay` shows
  *   pnpm export                            # only the list: after deleting a run's file
@@ -15,7 +15,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { runs, withSession } from "./data.ts";
+import { index, runs, withSession } from "./data.ts";
 import type { Run, RunWithSession } from "./replay/run.ts";
 import { tasks } from "./task.ts";
 
@@ -33,7 +33,8 @@ const deny = [
 
 const ids = process.argv.slice(2);
 const recorded = runs();
-const publicTasks = new Set((await tasks()).filter((t) => !t.private).map((t) => t.id));
+const allTasks = await tasks();
+const publicTasks = new Set(allTasks.filter((t) => !t.private).map((t) => t.id));
 
 const files = new Map<string, string>();
 const problems: string[] = [];
@@ -63,10 +64,10 @@ for (const [path, text] of files) {
 // The list is whatever the folder holds, so deleting a run's file and running this unpublishes it.
 mkdirSync(OUT, { recursive: true });
 const published: Run[] = readdirSync(OUT, { recursive: true, encoding: "utf8" })
-	.filter((f) => f.endsWith(".json") && f !== "runs.json")
+	.filter((f) => f.endsWith(".json") && f !== "tasks.json")
 	.map((f) => {
 		const { session: _, ...run }: RunWithSession = JSON.parse(readFileSync(join(OUT, f), "utf8"));
 		return run;
 	});
-writeFileSync(join(OUT, "runs.json"), JSON.stringify(published));
+writeFileSync(join(OUT, "tasks.json"), JSON.stringify(index(published, allTasks)));
 console.log(`${files.size} added, ${published.length} published → ${OUT}`);
