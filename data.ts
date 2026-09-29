@@ -76,9 +76,10 @@ export function load(id: string, stage: Stage): RunWithSession | null {
 const withoutSession = ({ session: _, ...run }: RunWithSession): Run => run;
 
 /** The tasks that have runs, each with its trials newest first (Reduck MCP first within one);
- *  the task run most recently first. A run whose task file is gone is left out: there is
- *  nothing to title it with. */
+ *  pinned tasks first, then the task run most recently first. A run whose task file is gone is
+ *  left out: there is nothing to title it with. */
 export function index(runs: Run[], tasks: Task[]): TaskTrials[] {
+	const pinned = new Set(tasks.filter((t) => t.pinned).map((t) => t.id));
 	return tasks
 		.map(({ id, name, prompt }) => {
 			const mine = runs.filter((r) => r.task === id);
@@ -91,7 +92,11 @@ export function index(runs: Run[], tasks: Task[]): TaskTrials[] {
 			return { id, name, prompt, trials };
 		})
 		.filter((t) => t.trials.length)
-		.sort((a, b) => (a.trials[0].id < b.trials[0].id ? 1 : -1));
+		.sort(
+			(a, b) =>
+				Number(pinned.has(b.id)) - Number(pinned.has(a.id)) ||
+				(a.trials[0].id < b.trials[0].id ? 1 : -1)
+		);
 }
 
 export function withSession({ transcript, ...run }: Recorded): RunWithSession {

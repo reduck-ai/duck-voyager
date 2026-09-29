@@ -29,6 +29,8 @@ export type Task = {
 	 *  the rest. */
 	name: string;
 	prompt: string;
+	/** Shown first on the page, whatever its trials' dates. */
+	pinned?: boolean;
 	requires?: () => Verdict | Promise<Verdict>;
 	check?: (run: Run) => Verdict | Promise<Verdict>;
 };
