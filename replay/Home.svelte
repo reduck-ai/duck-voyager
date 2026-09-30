@@ -558,8 +558,10 @@
 		article {
 			padding: 16px 16px 12px;
 		}
+		/* A fixed grade column, as wide as "Not graded": each row is its own grid, so a
+		   column sized to its content would give each run a bar track of its own length. */
 		.run {
-			grid-template-columns: 1fr 44px 50px auto;
+			grid-template-columns: 1fr 44px 50px 76px;
 			row-gap: 4px;
 			margin-top: 12px;
 		}
