@@ -77,7 +77,10 @@
 
 <style>
 	/* Reduck's palette (app/src/lib/styles/colorPalette.css), on a warm light page. Text is
-	   grey-900, never pure black; the brand orange is the one accent. */
+	   grey-900, never pure black; the brand orange is the one accent. Where the two tools are
+	   told apart, Reduck takes the orange and Chrome the ink. The brand orange itself is too
+	   light to read on white (2.9:1), so marks take orange-600 (3.6:1, over the 3:1 a graphic
+	   needs) and text orange-700 (5.2:1, over the 4.5:1 text needs). */
 	:global(:root) {
 		--ink: #111827;
 		--ink-2: #4b5563;
@@ -87,6 +90,9 @@
 		--brand: #f37321;
 		--pass: #16a34a;
 		--fail: #dc2626;
+		--brand-text: #c2410c;
+		--reduck: #ea580c;
+		--chrome: var(--ink);
 	}
 	:global(body) {
 		margin: 0;

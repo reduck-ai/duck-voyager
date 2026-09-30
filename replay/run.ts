@@ -35,7 +35,7 @@ export const ARM_NAMES: Record<Run["arm"], string> = {
 
 export const kTokens = (n: number) => `${Math.round(n / 1000)}k`;
 
-export const verdictLabel =(run: Run) =>
+export const verdictLabel = (run: Run) =>
 	run.verdict ? (run.verdict.pass ? "✓ Passed" : "✗ Failed") : "Not graded";
 
 const GRADERS: Record<NonNullable<Verdict["by"]>, string> = {
@@ -57,6 +57,17 @@ export const day = (trial: Trial) =>
 
 type Line = { n: string; word: string };
 
+/** One metric against another's, a run's or a tool's mean, as a ratio worded for whichever
+ *  way it goes. A ratio that would read 1.0× is a tie, said as such; with a zero there is no
+ *  ratio to show, only the way it goes. */
+function ratio(mine: number, theirs: number, better: string, worse: string, same: string): Line {
+	if (!(mine > 0 && theirs > 0))
+		return { n: "", word: mine === theirs ? same : mine < theirs ? better : worse };
+	const n = (Math.max(mine, theirs) / Math.min(mine, theirs)).toFixed(1);
+	if (n === "1.0") return { n: "", word: same };
+	return { n: `${n}×`, word: mine < theirs ? better : worse };
+}
+
 /** Who won a trial, and why. A run must pass to win: when only one did, it wins and that is
  *  the whole story; when both did, the faster wins, with each metric as a ratio worded for
  *  whichever way it goes. No winner when a run is missing, ungraded, or both failed. */
@@ -75,14 +86,10 @@ export function outcome(runs: Run[]): { winner: Run | null; lines: Line[]; text:
 	} else {
 		const other = a.wallMs <= b.wallMs ? b : a;
 		winner = other === a ? b : a;
-		const ratio = (mine: number, theirs: number, better: string, worse: string): Line =>
-			mine <= theirs
-				? { n: `${(theirs / mine).toFixed(1)}×`, word: better }
-				: { n: `${(mine / theirs).toFixed(1)}×`, word: worse };
 		lines = [
-			ratio(winner.wallMs, other.wallMs, "faster", "slower"),
-			ratio(winner.costUsd, other.costUsd, "cheaper", "costlier"),
-			ratio(winner.context, other.context, "smaller context", "larger context")
+			ratio(winner.wallMs, other.wallMs, "faster", "slower", "about as fast"),
+			ratio(winner.costUsd, other.costUsd, "cheaper", "costlier", "about the same cost"),
+			ratio(winner.context, other.context, "smaller context", "larger context", "about the same context")
 		];
 	}
 	const said = lines.map((l) => (l.n ? `${l.n} ${l.word}` : l.word)).join(" · ");
@@ -114,6 +121,24 @@ export function scoreboard(tasks: TaskTrials[]) {
 				usd: mean(mine(bothPassed).map((r) => r.costUsd))
 			};
 		})
+	};
+}
+
+/** The scoreboard in one line: the faster tool over the tasks both passed (the cheaper on a
+ *  tie of time), and by how much it was faster and cheaper (or costlier). None until a task has
+ *  both tools passing, and none on a tie of both, which no tool leads. */
+export function lead(board: ReturnType<typeof scoreboard>) {
+	if (!board.compared) return null;
+	const [a, b] = board.arms;
+	if (a.ms === b.ms && a.usd === b.usd) return null;
+	const winner = a.ms < b.ms || (a.ms === b.ms && a.usd < b.usd) ? a : b;
+	const other = winner === a ? b : a;
+	return {
+		arm: winner.arm,
+		lines: [
+			ratio(winner.ms, other.ms, "faster", "slower", "about as fast"),
+			ratio(winner.usd, other.usd, "cheaper", "costlier", "about the same cost")
+		]
 	};
 }
 

@@ -102,7 +102,7 @@
 				{:else}
 				<header>
 					<span>
-						<strong>{ARM_NAMES[run.arm]}</strong>
+						<strong class="arm" style:--arm="var(--{run.arm})">{ARM_NAMES[run.arm]}</strong>
 						<span class="model">· {run.session.models.map(modelName).join(", ")}</span>
 						{#if import.meta.env.DEV}<span class="at">{run.stage}</span>{/if}
 					</span>
@@ -266,6 +266,17 @@
 		font-size: 20px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
+	}
+	/* A dot in the tool's colour, `--arm`, the one it has on the home page. */
+	.arm::before {
+		content: "";
+		display: inline-block;
+		width: 8px;
+		height: 8px;
+		margin-right: 8px;
+		border-radius: 50%;
+		background: var(--arm);
+		vertical-align: 1px;
 	}
 	.model {
 		color: #7b7a74;
