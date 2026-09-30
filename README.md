@@ -1,4 +1,4 @@
-# Duck Voyager
+# Reduck Voyager
 
 Evals for AI agents on real browser tasks, by [Reduck](https://reduck.ai). Results: https://voyager.reduck.ai.
 
@@ -79,7 +79,7 @@ pnpm check                                                   # svelte-check: the
 - `mcp.ts` is an MCP server over the transcripts and the runs, so an agent can check a run step by step, screenshots included:
 
   ```sh
-  claude mcp add -s user claude-sessions-parser -- node <path>/duck-voyager/mcp.ts
+  claude mcp add -s user claude-sessions-parser -- node <path>/reduck-voyager/mcp.ts
   ```
 
   `list_runs`, `read_session` and `read_step` (a run at any stage: raw transcript, draft, published), `export_run`, `redact_export`, and `list_sessions` for any other Claude Code session.

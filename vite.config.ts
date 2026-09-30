@@ -39,7 +39,7 @@ const live: Plugin = {
 	}
 };
 
-// A relative base: the site is served from a subpath (GitHub Pages, /duck-voyager/).
+// A relative base: the site is served from a subpath (GitHub Pages, /reduck-voyager/).
 export default defineConfig({
 	root: "replay",
 	base: "./",

@@ -50,7 +50,7 @@
 	<header>
 		<div class="top">
 			<a class="by" href="https://reduck.ai">by <img src="./reduck.png" alt="Reduck" /></a>
-			<a class="github" href="https://github.com/reduck-ai/duck-voyager">
+			<a class="github" href="https://github.com/reduck-ai/reduck-voyager">
 				<!-- GitHub's mark (primer/octicons, mark-github-16). -->
 				<svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
 					<path
@@ -60,7 +60,7 @@
 				GitHub
 			</a>
 		</div>
-		<h1>Duck Voyager</h1>
+		<h1>Reduck Voyager</h1>
 		<p class="tagline">Evals for AI agents on real browser tasks.</p>
 		<p>
 			An open-source framework that tests agents on real knowledge work in the browser: market

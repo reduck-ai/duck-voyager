@@ -4,7 +4,7 @@
  * its draft export, its published file), draft it, and redact the draft (export.ts says why).
  * Approving a draft is a person's yes, so it stays `pnpm export --approve`.
  *
- *   claude mcp add -s user claude-sessions-parser -- node <repo>/duck_voyager/mcp.ts
+ *   claude mcp add -s user claude-sessions-parser -- node <path>/reduck-voyager/mcp.ts
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
